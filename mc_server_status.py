@@ -5,12 +5,12 @@ import lib.screen as screen
 import lib.ssh as ssh
 import lib.mc_server as mc_server
 from RPLCD.i2c import CharLCD
-
-#-----------------------------
+import time
+import lib.lcd as lcd_lib
 
 online = None
 number_of_slots = None
-player_list = None
+player_list = ""
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -35,27 +35,36 @@ lcd_display_width = int(config.get('I2C_SCREEN_INFO', 'width'))
 lcd_display_address = int(config.get('I2C_SCREEN_INFO', 'address'), 16)
 lcd = CharLCD(i2c_expander='PCF8574', address=lcd_display_address, port=1, cols=lcd_display_width, rows=lcd_display_height, dotsize=8, backlight_enabled=True)
 
-
-
-#-----------------------------
+print("Starting script...")
+try:
+    lcd.clear()
+    lcd.write_string('Starting\n\rserver monitor for:\n\r' + screen_server_name)
+    # Reset all screen connections at the beginning
+    if ssh.establish_connection_via_ssh(server_ip, ssh_login, ssh_password):
+        print("Established SSH connection.")
+        screen.detach_from_screen(screen_server_name)
+        time.sleep(2)  # Wait to ensure the command completes
+        screen.reattach_to_screen(screen_server_name)
+        print("Screen reconnected.")
+        lcd.clear()
+except Exception as e:
+    led.turn_off(server_status_led)
+    print(f"Exception: {e}")
+    lcd.clear()
+    lcd.write_string(screen_server_name + 'server script error')
 
 try:    
     if mc_server.is_online(server_ip):
+        print("Server is online.")
+        if number_of_slots == None:
+            number_of_slots= mc_server.number_of_slots(server_ip)
+        
         led.turn_on(server_status_led)
-        online = mc_server.get_number_of_online(server_ip)
-        number_of_slots= mc_server.number_of_slots(server_ip)
+        online = mc_server.get_number_of_online(server_ip)        
         
         print("Players online: " + str(online) + "/" + str(number_of_slots))
-        lcd.clear()
-        lcd.write_string('Online: ' + str(online) + "/" + str(number_of_slots) + "\n")
 
-        try:
-            if ssh.establish_connection_via_ssh(server_ip, ssh_login, ssh_password):
-                if screen.establish_connection_with_screen(screen_server_name):
-                    player_list = mc_server.get_player_list()
-
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        lcd_lib.display_server_info(lcd, online)
 
         if online == 0:
             led.turn_off(server_populated_led)
@@ -64,25 +73,27 @@ try:
 
     else:
         led.turn_off(server_status_led)
+        #lcd.clear()
+        #lcd.write_string('Unexpected error')
+        print("Unexpected error")
 
 except Exception as e:
     led.turn_off(server_status_led)
-    print("Server offline")
+    print(f"Exception: {e}")
+    #lcd.clear()
+    #lcd.write_string(screen_server_name + ' server offline')
+
+if False:
+    # Cleanup
+    led.turn_off(server_status_led)
+    led.turn_off(server_populated_led)
+    server_populated_led.release()
+    server_status_led.release()
     lcd.clear()
-    lcd.write_string(screen_server_name + ' server offline')
+    lcd.backlight_enabled = False
+    ssh.close_connection()  # Close SSH connection
 
-#-----------------------------
-
-#cleanup
-led.turn_off(server_status_led)
-led.turn_off(server_populated_led)
-server_populated_led.release()
-server_status_led.release()
-lcd.clear()
-lcd.backlight_enabled=False
-
-
-print("\n------------EOP Summary------------")
-print("online= " + str(online))
-print("max_number_of_players= " + str(number_of_slots))
-print("player_list= " + player_list)
+    print("\n------------EOP Summary------------")
+    print("online= " + str(online))
+    print("max_number_of_players= " + str(number_of_slots))
+    print("player_list= " + player_list)

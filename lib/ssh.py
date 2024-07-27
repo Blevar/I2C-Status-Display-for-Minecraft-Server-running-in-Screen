@@ -1,9 +1,11 @@
 from pexpect import pxssh
+import time
+import pyautogui
 
 s = None
 
 def establish_connection_via_ssh(server_ip, ssh_login, ssh_password):
-    global s    
+    global s
     s = pxssh.pxssh()
     try:
         s.login(server_ip, ssh_login, ssh_password)
@@ -14,39 +16,62 @@ def establish_connection_via_ssh(server_ip, ssh_login, ssh_password):
         print(str(e))
         return False
 
-def sendline(string):
+def close_connection():
+    global s
+    if s:
+        try:
+            send_ctrl_a_ctrl_d()
+            s.sendline('exit')  # Attempt to exit
+            s.expect([pxssh.EOF, pxssh.TIMEOUT], timeout=1)
+        except Exception as e:
+            print(f"Error closing SSH connection: {e}")
+        finally:
+            s = None
+        print("SSH connection closed.")
+
+def sendline(command):
     global s
     try:
-        s.sendline(string)
+        s.sendline(command)
         s.prompt()
         return s.before.decode('UTF-8')
     except Exception as e:
         print(f"Error sending line: {e}")
         return ''
-         
-def sendline_to_screen(string):
+
+def sendline_to_screen(command, delay=1):
     global s
     try:
-        print("Sending line to screen: " + string)
-        s.sendline(string)        
-        print("Line setnt")
+        s.sendline(command)
+        time.sleep(delay)  # Wait for the command to complete
+        #s.prompt()
         return s.before.decode('UTF-8')
     except Exception as e:
-        print(f"Error sending line: {e}")
-        return '' 
+        print(f"Error sending line to screen: {e}")
+        return ''
 
-def connect_to_screen(server_name):
+def reconnect_to_screen(screen_name):
     global s
     try:
-        s.sendline("screen -r " + server_name)
+        s.sendline(f"screen -r -d {screen_name}")
+        s.prompt()  # Ensure the command completes
     except Exception as e:
-        print(f"Error sending line: {e}")
-        return '' 
-    
-def reconnect_to_screen(server_name):
+        print(f"Error reconnecting to screen: {e}")
+        return ''
+
+def connect_to_screen(screen_name):
     global s
     try:
-        s.sendline("screen -r -d " + server_name)
+        s.sendline(f"screen -r {screen_name}")
+        s.prompt()  # Ensure the command completes
     except Exception as e:
-        print(f"Error sending line: {e}")
-        return '' 
+        print(f"Error connecting to screen: {e}")
+        return ''
+
+def send_ctrl_a_ctrl_d():
+    # Send Ctrl+A
+    pyautogui.hotkey('ctrl', 'a')
+    time.sleep(0.5)  # Slight delay to ensure the action is registered
+    # Send Ctrl+D
+    pyautogui.hotkey('ctrl', 'd')
+    time.sleep(0.5)  # Slight delay to ensure the action is registered
