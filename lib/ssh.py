@@ -21,7 +21,6 @@ def close_connection():
     if s:
         try:
             send_ctrl_a_ctrl_d()
-            s.sendline('exit')  # Attempt to exit
             s.expect([pxssh.EOF, pxssh.TIMEOUT], timeout=1)
         except Exception as e:
             print(f"Error closing SSH connection: {e}")
@@ -44,7 +43,6 @@ def sendline_to_screen(command, delay=1):
     try:
         s.sendline(command)
         time.sleep(delay)  # Wait for the command to complete
-        #s.prompt()
         return s.before.decode('UTF-8')
     except Exception as e:
         print(f"Error sending line to screen: {e}")

@@ -8,49 +8,64 @@ lcd_cols = int(config.get('I2C_SCREEN_INFO', 'width'))
 lcd_rows = int(config.get('I2C_SCREEN_INFO', 'height'))
 server_ip = config.get('SSH_SERVER_INFO', 'server_ip')
 number_of_slots = mc_server.number_of_slots(server_ip)
+current_index = 0  # Global variable to keep track of the current player index for scrolling
 
-def display_server_info(lcd, online):
-
+def display_server_info(lcd, online, player_list):
     global lcd_cols
-    global lcd_rows
-    global number_of_slots
+    global lcd_rows    
     global server_ip
+    global current_index  # Use the global variable to keep track of the current index
 
-    player_list = mc_server.get_player_list()
-    print(f"Player list: {player_list}")
+    write_online(lcd, online)
+    write_latency(lcd)
 
-    lcd.clear()
-    
-    # First line with online players and latency
-    latency = round(mc_server.get_latency(server_ip)) + 1
-    print("Latency: " + str(latency) + "ms")
-    first_line = f'Online: {online}/{number_of_slots}'
-    
-    # Calculate the number of spaces to add for right alignment of latency
-    spaces = lcd_cols - len(first_line) - len(f'{latency}ms')
-    if spaces < 0:
-        spaces = 0  # Ensure spaces is not negative
-    
-    lcd.write_string(first_line + ' ' * spaces + f'{latency}ms')
+    lcd.cursor_pos = (1, 0)
 
-    # Second to fourth lines with player names
+    # Prepare the player list for scrolling
     players = ' '.join(player_list)
     words = players.split()
-    
-    current_line = 1
-    current_length = 0
-    
-    for word in words:
-        if current_length + len(word) + 1 > lcd_cols:
-            if current_line >= lcd_rows - 1:  # leave space for the last row
-                break
-            lcd.write_string('\n\r')
+    num_lines = lcd_rows - 1  # Number of lines available for player names
+
+    lines = [''] * num_lines
+    current_line = 0
+
+    for i in range(len(words)):
+        index = (current_index + i) % len(words)
+        word = words[index]
+        if len(lines[current_line]) + len(word) + 1 > lcd_cols:
             current_line += 1
-            current_length = 0
-        
-        if current_length > 0:
-            lcd.write_string(' ')
-            current_length += 1
-        
-        lcd.write_string(word)
-        current_length += len(word)
+            if current_line >= num_lines:
+                break
+        if lines[current_line]:
+            lines[current_line] += ' '
+        lines[current_line] += word
+
+    # Pad lines with spaces to ensure they overwrite previous content
+    for i in range(num_lines):
+        lines[i] = lines[i].ljust(lcd_cols)
+    
+    # Write lines to the LCD
+    lcd.cursor_pos = (1, 0)
+    for line in lines:
+        lcd.write_string(line)
+        lcd.write_string('\n\r')
+
+    # Update the current index for the next refresh
+    current_index = (current_index + 1) % len(words)
+
+def prepare_lcd(lcd):
+    lcd.clear()
+    spaces = lcd_cols - 9
+    lcd.write_string("Online:" + ' ' * spaces + "ms")
+
+def write_online(lcd, online):
+    if online is not None:
+        global number_of_slots
+        lcd.cursor_pos = (0, 8)
+        lcd.write_string(str(online) + "/" + str(number_of_slots).ljust(3))
+
+def write_latency(lcd):
+    latency = str(round(mc_server.get_latency(server_ip)) + 1)
+    cursor_pos = lcd_cols - 2 - len(f'{latency}')
+    lcd.cursor_pos = (0, cursor_pos)
+    lcd.write_string(latency)
